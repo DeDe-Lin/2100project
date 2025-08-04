@@ -1,0 +1,1 @@
+update EMPLOYEE SET EMP_NAME='林先生Jack' where SOURCE_ORGNO='376530000A' and USERNAME like '300871' 

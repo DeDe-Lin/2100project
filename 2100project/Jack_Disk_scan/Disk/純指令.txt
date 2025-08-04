@@ -1,0 +1,49 @@
+# disk.ps1
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Get-FreeSummary {
+    param(
+        [string]$Computer,
+        [string]$Alias
+    )
+
+    try {
+        $disks = Get-WmiObject Win32_LogicalDisk -ComputerName $Computer -Filter "DriveType=3" -ErrorAction Stop |
+            Select-Object DeviceID,
+                @{Name='FreeGB';Expression={ "{0:F1}" -f ($_.FreeSpace/1GB) }}
+
+        if (-not $disks) {
+            Write-Warning "沒有取得任何磁碟資料: $Computer"
+            return
+        }
+
+        $parts = $disks | ForEach-Object {
+            $letter = $_.DeviceID.TrimEnd(':')
+            "$letter/$($_.FreeGB)GB"
+        }
+
+        $summary = "$Alias($Computer)-本次剩餘空間 " + ($parts -join ', ')
+        Write-Output $summary
+    } catch {
+        Write-Error "取資料失敗：$($_.Exception.Message)"
+    }
+}
+
+# 呼叫範例（固定別名 AP1 對應 192.168.6.82）
+#Get-FreeSummary -Computer "192.168.6.82" -Alias "AP1"
+
+$hostaddrs = @(
+    @{IP='192.168.6.81'; Alias='AP1'},
+    @{IP='192.168.6.82'; Alias='AP2'},
+    @{IP='192.168.6.83'; Alias='AP3'},
+    @{IP='192.168.6.84'; Alias='RAT'},
+    @{IP='192.168.6.85'; Alias='AT'}
+)
+
+$Report = ""
+foreach ($hostaddr in $hostaddrs) {
+    $Report += Get-FreeSummary -Computer $hostaddr.IP -Alias $t.Alias
+    $Report += "`r`n"  # 換行
+}
+$Report
+

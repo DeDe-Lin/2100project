@@ -1,0 +1,158 @@
+版控主機IP：192.168.6.78
+主機	IP：192.168.6.77
+主機2	IP：
+--版控主機儲存庫(git daemon)設定：
+mkdir D:/GitServer_TEST/Project.git	#創建資料夾
+cd D:/GitServer_TEST/Project.git	
+git init --bare	#初始化儲存庫
+--開啟儲存庫(git daemon)，執行完成這個指令後，儲存庫就可以被其他主機呼叫，類似開伺服器的概念。
+git daemon --reuseaddr --base-path=D:/GitServer_TEST --export-all --verbose --enable=receive-pack
+git daemon --reuseaddr --base-path=D:/GitServer_TEST --export-all --verbose --enable=receive-pack --log-destination=stderr #有更詳細的log
+git daemon --reuseaddr --base-path=D:/GitServer_TEST --export-all --verbose --enable=receive-pack --detach #後台執行
+git daemon --reuseaddr --base-path=D:/GitServer_TEST --export-all --verbose --enable=receive-pack --timeout=10 --init-timeout=5 --detach #請試試用 --init-timeout 與 --timeout 參數，讓 Git Daemon 在長時間沒有活動時自動斷開：
+
+
+#防火牆的輸入規則需開啟9418port
+#CMD需輸入icacls D:\GitServer_TEST\project.git /grant Everyone:F /T
+
+--先在版控主機clone一個工作目錄
+cd D:/Project_TEST
+git clone d:/GitServer_TEST/Project.git 
+cd D:/Project_TEST/Project
+git checkout -b master #新增一個master分支
+--先在Project資料夾做新增、修改、刪除檔案再進行下一步
+git add . #把所有Project的異動加入暫存區
+git commit -m "5.5.0.1" #把暫存區的資料上傳到本地資料庫，並命名此版本為 5.5.0.1
+git push origin master #將本地資料庫上傳到版控主機儲存庫
+
+--第一次的主機設定(192.168.6.77)
+cd D:
+git clone git://192.168.6.78/project.git	#先把檔案從192.168.6.78/project.git抓下來，就是把版本5.5.0.1的資料全部下載下來
+
+
+---日常作業(版更)
+#(版更時，先在版控主機的project直接覆蓋版更檔案後再執行下一步)
+git add . #將資料的變更加入暫存區
+git commit -m "5.5.0.2"	#將暫存區的異動加入本地資料庫，並命名此版本為 5.5.0.2
+git push origin master	#將本地資料庫推送到版控主機儲存庫
+
+
+--主機(192.168.6.77)要同步版控主機儲存庫
+git pull origin master	#將版控主機資料庫同步到主機本地資料庫
+
+
+----其他相關指令
+--取消 git add
+git reset <檔案名稱>	# 取消某個檔案的 git add
+git reset .		# 取消所有已 add 的檔案
+--取消 git commit
+git reset --soft HEAD~1		#取消 commit，保留變更在暫存區
+git reset --mixed HEAD~1	#取消 commit，變更回到工作目錄 (未 git add 狀態)
+git reset --hard HEAD~1		#完全撤銷 commit，所有變更刪除！(連git add一起刪除，資料夾檔案也一起刪除)
+--其他功能
+
+GIT_TRACE=1 git push origin master #詳細列出push的明細
+
+
+
+
+
+
+
+
+
+
+----------------------------Apache24
+#載Apache：https://www.apachelounge.com/download/
+#將檔案移到C:，並註冊、啟動服務
+cd C:/Apache24/bin
+httpd -k install
+httpd -k start
+#要到環境變數-系統變數-path新增路徑C:\Apache24\bin
+#服務裡面的Apache，右鍵-內容-登入-改成當前的使用者帳號及密碼
+#在 C:\Apache24\conf\httpd.conf 最底部 添加
+--------------
+#基本設定
+LoadModule auth_basic_module modules/mod_auth_basic.so
+LoadModule authn_file_module modules/mod_authn_file.so
+LoadModule authz_user_module modules/mod_authz_user.so
+LoadModule cgi_module modules/mod_cgi.so
+LoadModule alias_module modules/mod_alias.so
+# 啟用 CGI
+ScriptAlias /git/ "C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe/"
+<Directory "C:/Program Files/Git/mingw64/libexec/git-core/">
+    Options ExecCGI Indexes
+    Require all granted
+</Directory>
+# 設定 Git 專案目錄
+<Directory "D:/TEST">
+    AllowOverride None
+    Require all granted
+</Directory>
+SetEnv GIT_PROJECT_ROOT D:/TEST
+SetEnv GIT_HTTP_EXPORT_ALL
+
+#針對不同專案分別設定不同user或IP
+<Location "/git/ODC">
+    AuthType Basic
+    AuthName "Git ODC"
+    AuthUserFile "C:/Apache24/htdocs/.htpasswd"
+    Require user jack
+#    Require ip 192.168.6.77 
+</Location>
+<Location "/git/ODD">
+    AuthType Basic
+    AuthName "Git ODD"
+    AuthUserFile "C:/Apache24/htdocs/.htpasswd"
+    Require user zoey
+#    Require ip 192.168.6.76
+</Location>
+---------------
+
+
+#建立新密碼文件（參數-c只需執行一次，後續新增帳號不需要 -c，除非想要全部帳號都重建）
+C:/Apache24/bin/htpasswd -c C:/Apache24/conf/git-passwd jack
+htpasswd -c "C:/Apache24/htdocs/.htpasswd" jack
+#新增其他使用者
+C:/Apache24/bin/htpasswd C:/Apache24/conf/git-passwd Zoey
+htpasswd "C:/Apache24/htdocs/.htpasswd" Zoey
+#修改密碼
+htpasswd "C:/Apache24/htdocs/.htpasswd" jack
+#查看有哪些使用者
+cat /C/Apache24/htdocs/.htpasswd
+#啟動、停止 Apache(也可以直接到服務啟動)
+net stop apache2.4
+net start apache2.4
+
+
+
+客戶端常用指令：
+#關閉 Git 認證快取，讓使用者每次登入都要輸入帳號密碼
+git config --global credential.helper ""
+#刪除快取的憑證
+git credential reject http://192.168.6.78/git/pro.git
+#修改user姓名
+git config --global user.name "jack"
+git config --global user.email "jack@2100t.com.tw"
+#複製專案
+git clone http://192.168.6.78/git/ODC/Project.git
+git clone http://jack@192.168.6.78/git/ODC/Project.git
+#如果已經複製過了，要更新專案
+git pull origin master
+git pull http://jack@192.168.6.78/git/pro.git
+#將修改的資料儲存到暫存庫
+git add 檔案名稱 (.是全部)
+#將暫存庫的資料新增到本地資料庫
+git commit -m "XXX" (通常XXX會打版本別)
+#將本地儲存庫push到版控主機儲存庫
+git push origin master
+
+
+
+
+
+
+
+
+
+
